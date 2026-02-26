@@ -1,0 +1,5 @@
+{
+  "name": "PDFDo Web",
+  "description": "A comprehensive web-based PDF manipulation tool for splitting, merging, rotating, cropping, and converting PDFs.",
+  "requestFramePermissions": []
+}
