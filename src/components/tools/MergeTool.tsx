@@ -1,16 +1,32 @@
 import React, { useState } from 'react';
 import { FileUpload, SortableFileList, type SortableFileItem } from '@/components/ui/FileUpload';
-import { mergePdfs } from '@/lib/pdf-utils';
+import { mergePdfs, isPdfEncrypted } from '@/lib/pdf-utils';
 import { saveAs } from 'file-saver';
 import { Loader2, Layers } from 'lucide-react';
+import { AlertModal } from '@/components/ui/Modals';
 
 export function MergeTool() {
   const [items, setItems] = useState<SortableFileItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState('');
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
 
-  const handleFilesSelected = (selectedFiles: File[]) => {
-    const newItems = selectedFiles.map(file => ({
+  const handleFilesSelected = async (selectedFiles: File[]) => {
+    const validFiles: File[] = [];
+    for (const file of selectedFiles) {
+      const encrypted = await isPdfEncrypted(file);
+      if (encrypted) {
+        setAlertModal({
+          isOpen: true,
+          title: '无法处理加密文档',
+          message: `文件 "${file.name}" 已加密。请先解密后再试。`
+        });
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    const newItems = validFiles.map(file => ({
       id: Math.random().toString(36).substring(7),
       file
     }));
@@ -123,6 +139,13 @@ export function MergeTool() {
           </div>
         </div>
       )}
+      
+      <AlertModal 
+        isOpen={alertModal.isOpen} 
+        title={alertModal.title} 
+        message={alertModal.message} 
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })} 
+      />
     </div>
   );
 }

@@ -19,6 +19,20 @@ export type PdfFile = {
   height?: number;
 };
 
+export async function isPdfEncrypted(file: File): Promise<boolean> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    await PDFDocument.load(arrayBuffer, { ignoreEncryption: false });
+    return false;
+  } catch (error: any) {
+    if (error.message?.includes('encrypted') || error.name === 'EncryptedPDFError' || error.name === 'PasswordException') {
+      return true;
+    }
+    // If it's another error, we'll let it fail later or assume it's not encrypted
+    return false;
+  }
+}
+
 export async function getPdfInfo(file: File): Promise<PdfFile> {
   const arrayBuffer = await file.arrayBuffer();
   const pdfDoc = await PDFDocument.load(arrayBuffer);

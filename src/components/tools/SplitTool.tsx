@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FileUpload, FileList } from '@/components/ui/FileUpload';
-import { splitPdf, getPdfInfo, renderPageAsImage, type PdfFile } from '@/lib/pdf-utils';
+import { splitPdf, getPdfInfo, renderPageAsImage, isPdfEncrypted, type PdfFile } from '@/lib/pdf-utils';
 import { saveAs } from 'file-saver';
 import { Loader2, Scissors, CheckCircle2, Trash2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AlertModal, ImageModal } from '@/components/ui/Modals';
 
 interface PageData {
   id: string;
@@ -21,9 +22,23 @@ export function SplitTool() {
   const [isLoadingThumbnails, setIsLoadingThumbnails] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState('');
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
+  const [imageModal, setImageModal] = useState({ isOpen: false, imageUrl: '' });
+  const renderIdRef = useRef<number>(0);
 
   const handleFilesSelected = async (selectedFiles: File[]) => {
     const file = selectedFiles[0];
+    
+    const encrypted = await isPdfEncrypted(file);
+    if (encrypted) {
+      setAlertModal({
+        isOpen: true,
+        title: '无法处理加密文档',
+        message: `文件 "${file.name}" 已加密。请先解密后再试。`
+      });
+      return;
+    }
+
     setFiles([file]);
     setPages([]);
     setSelectedIds([]);
@@ -35,23 +50,65 @@ export function SplitTool() {
       
       // Load thumbnails
       setIsLoadingThumbnails(true);
-      const newPages: PageData[] = [];
-      const limit = Math.min(info.pageCount || 0, 50);
+      const totalPages = info.pageCount || 0;
+      const initialPages: PageData[] = [];
+      const renderId = Date.now();
+      renderIdRef.current = renderId;
       
-      for (let i = 0; i < limit; i++) {
+      for (let i = 0; i < totalPages; i++) {
+        initialPages.push({
+          id: `page-${i}-${renderId}`,
+          originalIndex: i,
+          image: ''
+        });
+      }
+      setPages(initialPages);
+      
+      // Load first 10 pages synchronously to show something immediately
+      const initialBatchSize = Math.min(totalPages, 10);
+      for (let i = 0; i < initialBatchSize; i++) {
         try {
-          const { image } = await renderPageAsImage(file, i, 2);
-          newPages.push({
-            id: `page-${i}-${Date.now()}`,
-            originalIndex: i,
-            image
-          });
+          // Use 50 DPI for split tool since it loads many pages at once
+          const { image } = await renderPageAsImage(file, i, 50 / 72);
+          initialPages[i].image = image;
         } catch (e) {
           console.error(`Error rendering page ${i}`, e);
         }
       }
-      setPages(newPages);
+      setPages([...initialPages]);
       setIsLoadingThumbnails(false);
+      
+      // Load remaining pages in background
+      if (totalPages > initialBatchSize) {
+        const loadRemaining = async () => {
+          for (let i = initialBatchSize; i < totalPages; i++) {
+            if (renderIdRef.current !== renderId) break; // Abort if new file loaded
+            
+            try {
+              const { image } = await renderPageAsImage(file, i, 50 / 72);
+              if (renderIdRef.current !== renderId) break;
+              
+              setPages(prev => {
+                const next = [...prev];
+                const idx = next.findIndex(p => p.originalIndex === i);
+                if (idx !== -1) {
+                  next[idx] = { ...next[idx], image };
+                }
+                return next;
+              });
+              
+              // Yield to main thread every 2 pages to keep UI responsive
+              if (i % 2 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+              }
+            } catch (e) {
+              console.error(`Error rendering page ${i}`, e);
+            }
+          }
+        };
+        // Start background loading without awaiting
+        loadRemaining();
+      }
       
     } catch (error) {
       console.error(error);
@@ -325,6 +382,10 @@ export function SplitTool() {
                       <div 
                         key={page.id}
                         onClick={() => togglePageSelection(page.id)}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          if (page.image) setImageModal({ isOpen: true, imageUrl: page.image });
+                        }}
                         className={cn(
                           "relative aspect-[3/4] cursor-pointer rounded-lg border-2 overflow-hidden transition-all shadow-sm hover:shadow-md group",
                           selectedIds.includes(page.id) 
@@ -358,6 +419,19 @@ export function SplitTool() {
           </div>
         </div>
       )}
+      
+      <AlertModal 
+        isOpen={alertModal.isOpen} 
+        title={alertModal.title} 
+        message={alertModal.message} 
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })} 
+      />
+      
+      <ImageModal 
+        isOpen={imageModal.isOpen} 
+        imageUrl={imageModal.imageUrl} 
+        onClose={() => setImageModal({ ...imageModal, isOpen: false })} 
+      />
     </div>
   );
 }

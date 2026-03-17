@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileUpload, FileList } from '@/components/ui/FileUpload';
-import { cropPdf, getPdfInfo, renderPageAsImage, type PdfFile } from '@/lib/pdf-utils';
+import { cropPdf, getPdfInfo, renderPageAsImage, isPdfEncrypted, type PdfFile } from '@/lib/pdf-utils';
 import { saveAs } from 'file-saver';
 import { Loader2, Crop } from 'lucide-react';
+import { AlertModal, ImageModal } from '@/components/ui/Modals';
 
 export function CropTool() {
   const [files, setFiles] = useState<File[]>([]);
@@ -13,9 +14,22 @@ export function CropTool() {
   const [message, setMessage] = useState('');
   const [previewScale, setPreviewScale] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
+  const [imageModal, setImageModal] = useState({ isOpen: false, imageUrl: '' });
 
   const handleFilesSelected = async (selectedFiles: File[]) => {
     const file = selectedFiles[0];
+    
+    const encrypted = await isPdfEncrypted(file);
+    if (encrypted) {
+      setAlertModal({
+        isOpen: true,
+        title: '无法处理加密文档',
+        message: `文件 "${file.name}" 已加密。请先解密后再试。`
+      });
+      return;
+    }
+
     setFiles([file]);
     setMargins({ top: 0, bottom: 0, left: 0, right: 0 });
     
@@ -24,8 +38,8 @@ export function CropTool() {
       setPdfInfo(info);
       setMessage('');
       
-      // Render first page for preview with 300 DPI
-      const scale = 300 / 72;
+      // Render first page for preview with 72 DPI
+      const scale = 72 / 72;
       const { image } = await renderPageAsImage(file, 0, scale);
       setPreviewImage(image);
     } catch (error) {
@@ -208,7 +222,11 @@ export function CropTool() {
                     <img 
                       src={previewImage} 
                       alt="PDF Preview" 
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-contain cursor-pointer"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (previewImage) setImageModal({ isOpen: true, imageUrl: previewImage });
+                      }}
                     />
                     {/* Crop Overlay */}
                     <div 
@@ -232,6 +250,19 @@ export function CropTool() {
           </div>
         </div>
       )}
+      
+      <AlertModal 
+        isOpen={alertModal.isOpen} 
+        title={alertModal.title} 
+        message={alertModal.message} 
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })} 
+      />
+      
+      <ImageModal 
+        isOpen={imageModal.isOpen} 
+        imageUrl={imageModal.imageUrl} 
+        onClose={() => setImageModal({ ...imageModal, isOpen: false })} 
+      />
     </div>
   );
 }

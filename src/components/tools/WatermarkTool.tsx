@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileUpload, FileList } from '@/components/ui/FileUpload';
-import { addWatermark, renderPageAsImage, getPdfInfo } from '@/lib/pdf-utils';
+import { addWatermark, renderPageAsImage, getPdfInfo, isPdfEncrypted } from '@/lib/pdf-utils';
 import { saveAs } from 'file-saver';
 import { Loader2, Stamp, Type, FileText, RotateCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AlertModal, ImageModal } from '@/components/ui/Modals';
 
 export function WatermarkTool() {
   const [files, setFiles] = useState<File[]>([]);
@@ -28,11 +29,13 @@ export function WatermarkTool() {
   
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
+  const [imageModal, setImageModal] = useState({ isOpen: false, imageUrl: '' });
 
   const loadPagePreview = async (file: File, pageIndex: number) => {
     try {
-      // Use 300 DPI (300/72 ≈ 4.17 scale) for high quality
-      const scale = 300 / 72;
+      // Use 72 DPI for faster preview loading
+      const scale = 72 / 72;
       const { image, width, height } = await renderPageAsImage(file, pageIndex, scale);
       setPreviewImage(image);
       setPageSize({ width, height });
@@ -43,6 +46,17 @@ export function WatermarkTool() {
 
   const handleFilesSelected = async (selectedFiles: File[]) => {
     const file = selectedFiles[0];
+    
+    const encrypted = await isPdfEncrypted(file);
+    if (encrypted) {
+      setAlertModal({
+        isOpen: true,
+        title: '无法处理加密文档',
+        message: `文件 "${file.name}" 已加密。请先解密后再试。`
+      });
+      return;
+    }
+
     setFiles([file]);
     setMessage('');
     setCurrentPage(0);
@@ -373,7 +387,12 @@ export function WatermarkTool() {
                     <img 
                       src={previewImage} 
                       alt="PDF Preview" 
-                      className="w-full h-full object-contain pointer-events-none block"
+                      className="w-full h-full object-contain pointer-events-none block cursor-pointer"
+                      style={{ pointerEvents: 'auto' }}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (previewImage) setImageModal({ isOpen: true, imageUrl: previewImage });
+                      }}
                     />
                     {/* Text Watermark Preview Overlay */}
                     {watermarkType === 'text' && watermarkText && (
@@ -387,7 +406,7 @@ export function WatermarkTool() {
                         }}
                       >
                         <span 
-                          className="whitespace-nowrap"
+                          className="whitespace-nowrap pointer-events-none"
                           style={{ 
                             fontSize: `${textOptions.size / 2}px`, // Scale down for preview roughly
                             color: textOptions.color,
@@ -429,6 +448,19 @@ export function WatermarkTool() {
           </div>
         </div>
       )}
+      
+      <AlertModal 
+        isOpen={alertModal.isOpen} 
+        title={alertModal.title} 
+        message={alertModal.message} 
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })} 
+      />
+      
+      <ImageModal 
+        isOpen={imageModal.isOpen} 
+        imageUrl={imageModal.imageUrl} 
+        onClose={() => setImageModal({ ...imageModal, isOpen: false })} 
+      />
     </div>
   );
 }

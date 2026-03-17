@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Scissors, Layers, RotateCw, Crop, Stamp, Image as ImageIcon } from 'lucide-react';
+import { Scissors, Layers, RotateCw, Crop, Stamp, Image as ImageIcon, FileText, FileCode } from 'lucide-react';
 import { SplitTool } from '@/components/tools/SplitTool';
 import { MergeTool } from '@/components/tools/MergeTool';
 import { RotateTool } from '@/components/tools/RotateTool';
 import { CropTool } from '@/components/tools/CropTool';
 import { WatermarkTool } from '@/components/tools/WatermarkTool';
 import { PdfToImageTool } from '@/components/tools/PdfToImageTool';
+import { WordToPdfTool } from '@/components/tools/WordToPdfTool';
+import { PdfToWordTool } from '@/components/tools/PdfToWordTool';
 import { cn } from '@/lib/utils';
 
 const TOOLS = [
@@ -15,6 +17,8 @@ const TOOLS = [
   { id: 'crop', name: '裁剪 PDF', icon: Crop, component: CropTool },
   { id: 'watermark', name: '水印', icon: Stamp, component: WatermarkTool },
   { id: 'image', name: 'PDF 转图片', icon: ImageIcon, component: PdfToImageTool },
+  { id: 'word2pdf', name: 'Word 转 PDF', icon: FileText, component: WordToPdfTool },
+  { id: 'pdf2word', name: 'PDF 转 Word', icon: FileCode, component: PdfToWordTool },
 ];
 
 export default function App() {

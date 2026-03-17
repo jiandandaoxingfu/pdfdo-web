@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { FileUpload, FileList } from '@/components/ui/FileUpload';
-import { rotatePdf, renderPageAsImage, getPdfInfo } from '@/lib/pdf-utils';
+import { rotatePdf, renderPageAsImage, getPdfInfo, isPdfEncrypted } from '@/lib/pdf-utils';
 import { saveAs } from 'file-saver';
 import { Loader2, RotateCw } from 'lucide-react';
+import { AlertModal, ImageModal } from '@/components/ui/Modals';
 
 export function RotateTool() {
   const [files, setFiles] = useState<File[]>([]);
@@ -10,15 +11,28 @@ export function RotateTool() {
   const [previewImage, setPreviewImage] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState('');
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
+  const [imageModal, setImageModal] = useState({ isOpen: false, imageUrl: '' });
 
   const handleFilesSelected = async (selectedFiles: File[]) => {
     const file = selectedFiles[0];
+    
+    const encrypted = await isPdfEncrypted(file);
+    if (encrypted) {
+      setAlertModal({
+        isOpen: true,
+        title: '无法处理加密文档',
+        message: `文件 "${file.name}" 已加密。请先解密后再试。`
+      });
+      return;
+    }
+
     setFiles([file]);
     setMessage('');
     
     try {
-      // Render first page for preview with 300 DPI (300/72 ≈ 4.17 scale)
-      const scale = 300 / 72;
+      // Render first page for preview with 72 DPI
+      const scale = 72 / 72;
       const { image, width, height } = await renderPageAsImage(file, 0, scale);
       setPreviewImage(image);
     } catch (e) {
@@ -138,7 +152,11 @@ export function RotateTool() {
                     <img 
                       src={previewImage} 
                       alt="PDF Preview" 
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-contain cursor-pointer"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (previewImage) setImageModal({ isOpen: true, imageUrl: previewImage });
+                      }}
                     />
                   </div>
                 ) : (
@@ -151,6 +169,19 @@ export function RotateTool() {
           </div>
         </div>
       )}
+      
+      <AlertModal 
+        isOpen={alertModal.isOpen} 
+        title={alertModal.title} 
+        message={alertModal.message} 
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })} 
+      />
+      
+      <ImageModal 
+        isOpen={imageModal.isOpen} 
+        imageUrl={imageModal.imageUrl} 
+        onClose={() => setImageModal({ ...imageModal, isOpen: false })} 
+      />
     </div>
   );
 }
